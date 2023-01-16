@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
-import 'package:add_to_gallery/src/copy_to_permenant_directory.dart';
-import 'package:add_to_gallery/src/get_file_type.dart';
+import 'package:mime/mime.dart';
+import 'package:path/path.dart' as path;
+
+import 'package:add_to_gallery/src/copy_to_temporary_directory.dart';
 
 /// Save images and videos to the gallery
 class AddToGallery {
@@ -18,22 +20,30 @@ class AddToGallery {
     /// Name of the album to save to, the album is created if necessary
     required String albumName,
 
+    /// Name of the file to save to, if not specified, the original filename is used
+    String? filename,
+
     /// Should we delete the original file after saving?
-    required bool deleteOriginalFile,
+    bool deleteOriginalFile = false,
   }) async {
     // Is it an image or video?
-    String filetype = getFileType(originalFile.path);
-    // Copy the original file (which may be temporary) to a permenant directory
-    File copiedFile = await copyToPermanentDirectory(
+    final fileType = lookupMimeType(originalFile.path);
+    if (fileType == null ||
+        !fileType.startsWith('image/') && !fileType.startsWith('video/')) {
+      throw ArgumentError(
+        'Path does not have an image or video file extension',
+      );
+    }
+    // Copy the original file to a temporary directory
+    File copiedFile = await copyToTemporaryDirectory(
       originalFile: originalFile,
-      prefix: filetype,
+      filename: filename ?? path.basenameWithoutExtension(originalFile.path),
     );
 
     // Save to gallery
     String? methodResults = await _channel.invokeMethod(
       'addToGallery',
       <String, dynamic>{
-        'type': filetype,
         'path': copiedFile.path,
         'album': albumName,
       },
